@@ -63,3 +63,4 @@ NMI_Handler:
 .weak HardFault_Handler
 HardFault_Handler:
     b .
+    

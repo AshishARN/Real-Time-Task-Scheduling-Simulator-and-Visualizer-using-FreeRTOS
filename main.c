@@ -1,38 +1,26 @@
-#include <stddef.h> // Required for size_t
-
-/* FreeRTOS includes. */
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h" // The header file for Semaphores and Mutexes
 
-/*
- * These are our own implementations of the basic C library functions
- * that FreeRTOS requires. By providing them ourselves, we remove the
-
- * need to link against any standard C libraries.
- */
-// void *memcpy(void *dest, const void *src, size_t n) {
-//     char *dp = dest;
-//     const char *sp = src;
-//     while (n--)
-//         *dp++ = *sp++;
-//     return dest;
-// }
-
-// void *memset(void *s, int c, size_t n) {
-//     unsigned char *p = s;
-//     while (n--)
-//         *p++ = (unsigned char)c;
-//     return s;
-// }
+/* Handle for the mutex that protects the UART */
+SemaphoreHandle_t xUartMutex;
 
 /* The memory-mapped address for the UART0 data register */
 volatile unsigned int * const UART0_DR = (unsigned int *)0x4000C000;
 
-/* Function to print a string to the UART */
-void print_uart0(const char *s) {
-    while(*s != '\0') {
-        *UART0_DR = (unsigned int)(*s);
-        s++;
+/*
+ * A printing function that is "task safe" because it uses the mutex.
+ */
+void safe_print(const char *s) {
+    // Attempt to take the mutex. Block indefinitely until it's available.
+    if (xSemaphoreTake(xUartMutex, portMAX_DELAY) == pdTRUE) {
+        // We now have exclusive access to the UART.
+        while(*s != '\0') {
+            *UART0_DR = (unsigned int)(*s);
+            s++;
+        }
+        // Release the mutex so another task can use the UART.
+        xSemaphoreGive(xUartMutex);
     }
 }
 
@@ -40,26 +28,35 @@ void print_uart0(const char *s) {
  * --- TASKS ---
  */
 
-/* Task A (High Priority) */
-void vTaskA(void *pvParameters) {
-    const char *pcTaskName = "Task A is running\r\n";
-    const TickType_t xDelay = pdMS_TO_TICKS(500); // Delay for 500 milliseconds
+/* Worker Task 1 */
+void vWorkerTask1(void *pvParameters) {
+    const char *pcTaskMessage = "Worker 1 says: part 1, part 2, part 3.\r\n";
+    // Pre-calculate the delay in ticks to avoid 64-bit division.
+    // (250ms * 1000 ticks/sec) / 1000 ms/sec = 250 ticks
+    const TickType_t xDelay = 250;
 
     for (;;) {
-        print_uart0(pcTaskName);
-        vTaskDelay(xDelay); // Block this task for a fixed period
+        // Print out the complete message.
+        safe_print(pcTaskMessage);
+
+        // Wait for a fixed period.
+        vTaskDelay(xDelay);
     }
 }
 
-/* Task B (Low Priority) */
-void vTaskB(void *pvParameters) {
-    const char *pcTaskName = "Task B is running\r\n";
-    //const TickType_t xDelay = pdMS_TO_TICKS(300);
+/* Worker Task 2 */
+void vWorkerTask2(void *pvParameters) {
+    const char *pcTaskMessage = "Worker 2 says: part 1, part 2, part 3.\r\n";
+    // Pre-calculate the delay in ticks.
+    // (300ms * 1000 ticks/sec) / 1000 ms/sec = 300 ticks
+    const TickType_t xDelay = 300;
 
     for (;;) {
-        print_uart0(pcTaskName);
-        //vTaskDelay(xDelay);
-        // This task does not block, it just runs in a tight loop.
+        // Print out the complete message.
+        safe_print(pcTaskMessage);
+
+        // Wait for a fixed period.
+        vTaskDelay(xDelay);
     }
 }
 
@@ -68,75 +65,24 @@ void vTaskB(void *pvParameters) {
  * --- MAIN ---
  */
 int main(void) {
-    /* Create Task A */
-    xTaskCreate(vTaskA,               /* Function that implements the task. */
-                "Task A",             /* Text name for the task. */
-                configMINIMAL_STACK_SIZE, /* Stack size in words, not bytes. */
-                NULL,                 /* Parameter passed into the task. */
-                2,                    /* Priority at which the task is created. */
-                NULL);                /* Used to pass out the created task's handle. */
+    // Create the mutex before any tasks that might use it.
+    xUartMutex = xSemaphoreCreateMutex();
 
-    /* Create Task B */
-    xTaskCreate(vTaskB,
-                "Task B",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                1,                    /* Lower priority than Task A */
-                NULL);
+    // Check the mutex was created successfully.
+    if (xUartMutex != NULL) {
+        // Create the two worker tasks with the same priority.
+        xTaskCreate(vWorkerTask1, "Worker 1", configMINIMAL_STACK_SIZE,
+                    NULL, 1, NULL);
 
-    print_uart0("Scheduler starting...\r\n");
+        xTaskCreate(vWorkerTask2, "Worker 2", configMINIMAL_STACK_SIZE,
+                    NULL, 1, NULL);
 
-    /* Start the scheduler. */
-    vTaskStartScheduler();
-
-    /*
-     * The scheduler has been started, so the program should never reach this
-     * point. If it does, it's likely due to insufficient heap memory for
-     * the idle task to be created.
-     */
-    for (;;) {
-        // Loop forever.
+        // Start the scheduler.
+        vTaskStartScheduler();
     }
 
+    /* If all is well, the scheduler will now be running, and the following
+    line will never be reached. */
+    for (;;);
     return 0;
 }
-
-// #include <stddef.h>
-
-// // void *memcpy(void *dest, const void *src, size_t n) {
-// //     char *dp = dest;
-// //     const char *sp = src;
-// //     while (n--)
-// //         *dp++ = *sp++;
-// //     return dest;
-// // }
-
-// // void *memset(void *s, int c, size_t n) {
-// //     unsigned char *p = s;
-// //     while (n--)
-// //         *p++ = (unsigned char)c;
-// //     return s;
-// // }
-// // Define the memory-mapped address for the UART0 data register
-// volatile unsigned int * const UART0_DR = (unsigned int *)0x4000C000;
-
-// // Function to print a string to the UART
-// void print_uart0(const char *s) {
-//     while(*s != '\0') { // Loop until the end of the string
-//         *UART0_DR = (unsigned int)(*s); // Write the character to the UART
-//         s++;
-//     }
-// }
-
-// // Entry point of our application
-// int main(void) {
-//     print_uart0("Hello from QEMU!\n");
-//     // while(1) {
-//     //     *UART0_DR = (unsigned int)('X');
-//     // }
-
-//     // Infinite loop to halt the processor
-//     while(1);
-
-//     return 0;
-// }
