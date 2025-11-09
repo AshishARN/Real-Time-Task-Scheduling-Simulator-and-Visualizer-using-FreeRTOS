@@ -42,7 +42,7 @@ $(TARGET).elf: $(OBJS) linker.ld
 # Target to run the application in QEMU
 run: all
 #qemu-system-arm -M mps2-an385 -nographic -nodefaults -serial stdio -kernel $(TARGET).elf
-	qemu-system-arm -M lm3s6965evb -nographic -nodefaults -serial stdio -kernel $(TARGET).elf
+	qemu-system-arm -M lm3s6965evb -nographic -nodefaults -serial stdio -kernel $(TARGET).elf > trace.log
 
 # Target to clean up the build directory
 clean:

@@ -1,0 +1,16 @@
+Scheduler starting... Task L will run first.
+0,Task L,IN
+L: Task started, trying to get mutex...
+L: >>> Task got the mutex! <<<
+L: Scheduler suspended. Creating M and H...
+L: Resuming scheduler...
+4,Task H,IN
+H: Task started, trying to get mutex...
+6,Task L,IN
+L: Task is now doing some 'work' while holding the mutex...
+L: Task finished work and is releasing the mutex.
+81,Task H,IN
+H: >>> Task got the mutex! <<<
+H: Task finished and is deleting itself.
+85,Task M,IN
+M: Task started, now running in a loop.

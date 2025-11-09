@@ -69,4 +69,53 @@ See http://www.FreeRTOS.org/RTOS-Cortex-M3-M4.html. */
 #define xPortPendSVHandler PendSV_Handler
 #define xPortSysTickHandler SysTick_Handler
 
+
+/* ----------------------------------------------------------
+ * TRACE HOOKS AND IMPLEMENTATION
+ * ----------------------------------------------------------*/
+#define configUSE_TRACE_FACILITY        1 // Enable the trace facility
+
+// We need a forward declaration for the print function used in the macro
+void print_uart0(const char *s);
+
+// Simple integer to string conversion
+static inline void itoa(int val, char* buf) {
+    if (val == 0) {
+        buf[0] = '0';
+        buf[1] = '\0';
+        return;
+    }
+    int i = 0;
+    int is_negative = val < 0;
+    if (is_negative) val = -val;
+
+    while (val != 0) {
+        buf[i++] = (val % 10) + '0';
+        val /= 10;
+    }
+    if (is_negative) buf[i++] = '-';
+    
+    // Reverse the string
+    for (int j = 0; j < i / 2; j++) {
+        char temp = buf[j];
+        buf[j] = buf[i - j - 1];
+        buf[i - j - 1] = temp;
+    }
+    buf[i] = '\0';
+}
+
+// The implementation of our trace macro
+#define TRACE_TASK_SWITCHED_IN_MACRO() \
+    do { \
+        char buffer[16]; \
+        itoa(xTaskGetTickCount(), buffer); \
+        print_uart0(buffer); \
+        print_uart0(","); \
+        print_uart0(pcTaskGetName(NULL)); \
+        print_uart0(",IN\r\n"); \
+    } while (0)
+
+#define traceTASK_SWITCHED_IN()         TRACE_TASK_SWITCHED_IN_MACRO()
+
+
 #endif /* FREERTOS_CONFIG_H */
